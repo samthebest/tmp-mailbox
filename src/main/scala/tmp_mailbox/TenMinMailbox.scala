@@ -34,6 +34,17 @@ class Inbox(expiration: Long) {
     createdAt = time
     emails = Nil
   }
+
+  def add(email: Email)(implicit clock: Clock): Either[UserError, Unit] =
+    this.synchronized(whenNotExpired(() => emails = email +: emails))
+
+  def getEmails()(implicit clock: Clock): Either[UserError, List[Email]] = {
+    val current = emails
+    whenNotExpired(() => current)
+  }
+
+  def whenNotExpired[T](f: () => T)(implicit clock: Clock): Either[UserError, T] =
+    if (isExpired(clock.now())) Left(UserError("Email address has expired")) else Right(f())
 }
 
 class TenMinMailbox(emailPrefixList: EmailPrefixList, expiration: Long, pageSize: Int) {
@@ -52,6 +63,17 @@ class TenMinMailbox(emailPrefixList: EmailPrefixList, expiration: Long, pageSize
 
     address
   }
+
+  def storeEmail(address: EmailAddress, email: Email)(implicit clock: Clock): Either[UserError, Unit] =
+    getInbox(address).flatMap(_.add(email))
+
+  def getEmails(address: EmailAddress)(implicit clock: Clock): Either[UserError, Iterator[Page]] =
+    getInbox(address).flatMap(_.getEmails()).map(_.grouped(pageSize).map(Page))
+
+  def getInbox(address: EmailAddress): Either[UserError, Inbox] =
+    emailPrefixList.inverseLookup.get(address.prefix)
+      .toRight(UserError(s"Email address not exist: ${address.address}"))
+      .map(inboxes(_))
 }
 
 trait Clock {

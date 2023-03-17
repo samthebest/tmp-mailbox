@@ -1,9 +1,8 @@
 # Admissions
 
-I've tried to stick to the crux of the problem by elucidating the core thrust of my idea, 
-so I've left out code pertaining to trivial/obvious stuff nor fleshed out much of the details.
-
-Unfortunately the code has a few comments, just to highlight things I've skipped.
+I've tried to stick to the crux of the problem, which is generating easy to remember unique emails with 
+potentially high TPS and in a thread safe way.  To elucidate the core thrust of my idea, I've left out code 
+pertaining to trivial/obvious stuff nor fleshed out much of the details.
 
 I can't see an efficient, but low framework/dependency way to avoid OOP style here.
 
