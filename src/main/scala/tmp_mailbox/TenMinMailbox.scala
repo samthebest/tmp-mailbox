@@ -9,7 +9,7 @@ case class EmailAddress(prefix: String) {
   val address: String = s"$prefix@ten-min-mailbox.com"
 }
 
-case class EmailPrefixList(prefixLength: Int, numPrefixes: Int) {
+case class EmailPrefixList(prefixLength: Int = 10, numPrefixes: Int = 1000000) {
   // TODO Load memorable strings from a static repository and deal with variable length prefixes
   val concatenated: String = Random.alphanumeric.dropWhile(_.isDigit).take(prefixLength * numPrefixes).mkString
   val last: Int = numPrefixes - 1

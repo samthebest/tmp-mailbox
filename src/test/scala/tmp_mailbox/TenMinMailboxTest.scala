@@ -9,12 +9,11 @@ object TenMinMailboxTest extends Specification {
 
   val smallPrefixList = EmailPrefixList(10, 3)
   val first :: second :: third :: Nil = smallPrefixList.prefixesWithIndex.map(_._1)
+  val pageSize = 3
 
   "TenMinMailbox.createInbox" should {
-
-
     "Cycle through the prefixes" in {
-      val mailbox = new TenMinMailbox(smallPrefixList, 10.minute.toMillis, 10)
+      val mailbox = new TenMinMailbox(smallPrefixList, 10.minute.toMillis, pageSize)
 
       mailbox.createInbox()(fixedClock(10.minute.toMillis)).prefix must_=== first
       mailbox.createInbox()(fixedClock(10.minute.toMillis)).prefix must_=== second
@@ -36,20 +35,21 @@ object TenMinMailboxTest extends Specification {
   }
 
   def testInit(): (TenMinMailbox, EmailAddress) = {
-    val mailbox = new TenMinMailbox(smallPrefixList, 10.minute.toMillis, 10)
+    val mailbox = new TenMinMailbox(smallPrefixList, 10.minute.toMillis, pageSize)
     (mailbox, mailbox.createInbox()(fixedClock(10.minute.toMillis)))
   }
 
   "TenMinMailbox.storeEmail and getEmails" should {
-    "Store emails that we can then get" in {
+    "Store emails that we can then get (and pages)" in {
       val (mailbox, address) = testInit()
 
       mailbox.storeEmail(address, Email("ben"))(fixedClock(0)) must beRight
       mailbox.storeEmail(address, Email("bob"))(fixedClock(0)) must beRight
       mailbox.storeEmail(address, Email("sam"))(fixedClock(0)) must beRight
+      mailbox.storeEmail(address, Email("bill"))(fixedClock(0)) must beRight
 
-      mailbox.getEmails(address)(fixedClock(0)).map(_.flatMap(_.emails).toList.map(_.content)) must
-        beRight(List("ben", "bob", "sam").reverse)
+      mailbox.getEmails(address)(fixedClock(0)).map(_.map(_.emails.map(_.content)).toList) must
+        beRight(List(List("bill", "sam", "bob"), List("ben")))
     }
 
     "Trying to store emails in invalid inbox returns UserError" in {
@@ -75,8 +75,8 @@ object TenMinMailboxTest extends Specification {
 
       mailbox.storeEmail(address, Email("after reset"))(fixedClock(0))
 
-      mailbox.getEmails(address)(fixedClock(20.minute.toMillis)).map(_.flatMap(_.emails).toList.map(_.content)) must
-        beRight(List("after reset").reverse)
+      mailbox.getEmails(address)(fixedClock(20.minute.toMillis)).map(_.map(_.emails.map(_.content)).toList) must
+        beRight(List(List("after reset")))
     }
   }
 }
