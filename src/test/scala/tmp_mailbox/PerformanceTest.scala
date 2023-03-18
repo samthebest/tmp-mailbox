@@ -1,7 +1,8 @@
 package tmp_mailbox
 
 import org.specs2.mutable.Specification
-import java.util.concurrent.atomic.AtomicInteger
+
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -9,45 +10,28 @@ import scala.util.control.NonFatal
 
 // TODO Put in IT directory or something
 object PerformanceTest extends Specification {
-  System.err.println("Creating uber prefix list")
-  val prefixList = EmailPrefixList()
-  System.err.println("Created uber prefix list")
-  implicit val clock: DefaultClock.type = DefaultClock
-
   "TenMinMailbox.createInbox" should {
-    val mailbox = new TenMinMailbox(prefixList, 10.minute.toMillis, 10)
     "Handle an extreme burst in 1 second, giving burst TPS of ~1,000,000" in {
+      val mail = new TenMinMail(EmailPrefixList(), 10.minute.toMillis, 10)
       val numFutures = 10
-      val numRuns = 1000000 / numFutures - 1
-
       val count: AtomicInteger = new AtomicInteger()
-      var blewUp: Boolean = false
+      val blewUp: AtomicBoolean = new AtomicBoolean()
       val start = System.currentTimeMillis()
 
-      def forkFuture(): Future[Unit] =
-        Future {
-          try {
-            (1 to numRuns).foreach(_ => mailbox.createInbox())
-          } catch {
-            case NonFatal(e) =>
-              e.printStackTrace()
-              blewUp = true
-          } finally {
-            count.addAndGet(1)
-          }
-        }
+      def createMany(): Unit =
+        try (1 until 1000000 / numFutures).foreach(_ => mail.createInbox()(() => System.currentTimeMillis()))
+        catch {
+          case NonFatal(e) =>
+            e.printStackTrace()
+            blewUp.set(true)
+        } finally count.addAndGet(1)
 
-      (1 to numFutures).foreach(_ => forkFuture())
+      (1 to numFutures).foreach(_ => Future(createMany()))
 
       while (count.get() < numFutures) java.lang.Thread.sleep(10)
 
-      val end = System.currentTimeMillis()
-
-      System.err.println("(end - start) = " + (end - start))
-
-      (end - start) must beLessThan(1000L)
-
-      blewUp must beFalse
+      (System.currentTimeMillis() - start) must beLessThan(1000L)
+      blewUp.get() must beFalse
     }
   }
 }

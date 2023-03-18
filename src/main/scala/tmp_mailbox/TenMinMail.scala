@@ -6,22 +6,18 @@ case class Email(content: String)
 case class UserError(msg: String)
 case class Page(emails: List[Email])
 case class EmailAddress(prefix: String) {
-  val address: String = s"$prefix@ten-min-mailbox.com"
+  val address: String = s"$prefix@mail.com"
+}
+
+trait Clock {
+  def now(): Long
 }
 
 case class EmailPrefixList(prefixLength: Int = 10, numPrefixes: Int = 1000000) {
-  // TODO Load memorable strings from a static repository and deal with variable length prefixes
-  val concatenated: String = Random.alphanumeric.dropWhile(_.isDigit).take(prefixLength * numPrefixes).mkString
-  val last: Int = numPrefixes - 1
+  // TODO Load memorable strings from a pre-gen static repository and deal with variable length prefixes
+  val concatenated: String = Random.alphanumeric.take(prefixLength * numPrefixes).mkString
   val prefixesWithIndex: List[(String, Int)] = concatenated.grouped(prefixLength).zipWithIndex.toList
   val inverseLookup: Map[String, Int] = prefixesWithIndex.toMap.view.mapValues(_ / prefixLength).toMap
-
-  def get(nth: Int): String = concatenated.slice(nth * prefixLength, (nth + 1) * prefixLength)
-
-  def nextN(nth: Int): Int = {
-    val next = nth + 1
-    if (next > last) 0 else next
-  }
 }
 
 class Inbox(expiration: Long) {
@@ -30,7 +26,8 @@ class Inbox(expiration: Long) {
 
   def isExpired(now: Long): Boolean = now - createdAt >= expiration
 
-  def reset(time: Long): Unit = this.synchronized {
+  def reset(time: Long)(implicit clock: Clock): Unit = this.synchronized {
+    require(isExpired(clock.now()), "Trying to reset a live inbox. Maybe need a bigger prefix list")
     createdAt = time
     emails = Nil
   }
@@ -44,24 +41,19 @@ class Inbox(expiration: Long) {
   }
 
   def whenNotExpired[T](f: () => T)(implicit clock: Clock): Either[UserError, T] =
-    if (isExpired(clock.now())) Left(UserError("Email address has expired")) else Right(f())
+    if (isExpired(clock.now())) Left(UserError("Email expired")) else Right(f())
 }
 
-class TenMinMailbox(emailPrefixList: EmailPrefixList, expiration: Long, pageSize: Int) {
-  private val inboxes: Array[Inbox] = Array.fill(emailPrefixList.numPrefixes)(new Inbox(expiration))
-  private var inboxOffset: Int = 0
+class TenMinMail(emailPrefixList: EmailPrefixList, expiration: Long, pageSize: Int) {
+  import emailPrefixList._
+  private val inboxes: Array[Inbox] = Array.fill(numPrefixes)(new Inbox(expiration))
+  private var offset: Int = 0
 
   def createInbox()(implicit clock: Clock): EmailAddress = this.synchronized {
-    val now = clock.now()
-    val address = EmailAddress(emailPrefixList.get(inboxOffset))
-    val inbox = inboxes(inboxOffset)
-
-    require(inbox.isExpired(now), "TPS limit reached, should be impossible. Need a bigger prefix list")
-
-    inboxOffset = emailPrefixList.nextN(inboxOffset)
-    inbox.reset(now)
-
-    address
+    val next = offset + 1
+    inboxes(offset).reset(clock.now())
+    offset = if (next > numPrefixes - 1) 0 else next
+    EmailAddress(concatenated.substring((next - 1) * prefixLength, next * prefixLength))
   }
 
   def storeEmail(address: EmailAddress, email: Email)(implicit clock: Clock): Either[UserError, Unit] =
@@ -71,15 +63,5 @@ class TenMinMailbox(emailPrefixList: EmailPrefixList, expiration: Long, pageSize
     getInbox(address).flatMap(_.getEmails()).map(_.grouped(pageSize).map(Page))
 
   def getInbox(address: EmailAddress): Either[UserError, Inbox] =
-    emailPrefixList.inverseLookup.get(address.prefix)
-      .toRight(UserError(s"Email address not exist: ${address.address}"))
-      .map(inboxes(_))
-}
-
-trait Clock {
-  def now(): Long
-}
-
-object DefaultClock extends Clock {
-  def now(): Long = System.currentTimeMillis()
+    inverseLookup.get(address.prefix).toRight(UserError(s"Not exist: ${address.address}")).map(inboxes(_))
 }
