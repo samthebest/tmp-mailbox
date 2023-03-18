@@ -50,8 +50,8 @@ class TenMinMail(emailPrefixList: EmailPrefixList, expiration: Long, pageSize: I
   private var offset: Int = 0
 
   def createInbox()(implicit clock: Clock): EmailAddress = this.synchronized {
-    val next = offset + 1
     inboxes(offset).reset(clock.now())
+    val next = offset + 1
     offset = if (next > numPrefixes - 1) 0 else next
     EmailAddress(concatenated.substring((next - 1) * prefixLength, next * prefixLength))
   }

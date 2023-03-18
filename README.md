@@ -9,8 +9,9 @@ pertaining to trivial/obvious stuff nor fleshed out much of the details.
 
 **Single Node:**
 
-**Burst TPS**: 1,000,000 (easily, ignoring HTTP wrapper overhead)
-**Sliding window average TPS**: 10,000 (easily, ignoring HTTP wrapper overhead)
+**Burst TPS**: 1,000,000 (easily, but ignoring HTTP wrapper overhead)
+
+**Sliding window average TPS**: 10,000 (easily, but ignoring HTTP wrapper overhead)
 
 Distributing: trivial by design, can beat the above TPS if necessary
 
@@ -31,18 +32,20 @@ I have not implemented:
    (using suffixes based on 10 minute time windows, it would be fairly easy to avoid re-use)
  - We want to optimise for creating inboxes, since this is the only part that really needs global consistency.
    Optimising for adding and getting emails is trivial if we solve this well.
+ - The current logic assumes all prefixes are the same length for simplicity.  (Fixing this is just a case of adding
+   a couple of hash maps for storing indexes/lengths or something)
 
 # Design
 
 Pre-generate a huge list of easy to remember email address prefixes before application launch, 
 at launch load this store in memory (or even L3 cache), 
-then cycle around them,
+then cycle around them.
 
 ## Minimise Blocking Logic
 
 The only part of the core logic that needs to block is really trivial, and so easy to run concurrently at high TPS
 
-The blocking part is just incrementing a number (pointer), a call to `System.currentTimeMillis()`, some string ops,
+The blocking part is just incrementing a number (pointer), a call to `System.currentTimeMillis()`,
 and slicing an array, stuff like that.
 
 ## Unique Emails For Long Time
